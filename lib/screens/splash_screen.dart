@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../login_screen.dart';
+import '../dashboard_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,13 +34,15 @@ class _SplashScreenState extends State<SplashScreen>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Navigate to Login after a delay
-    Future.delayed(const Duration(seconds: 4), () {
+    // Navigate after a delay
+    Future.delayed(const Duration(seconds: 3), () {
       if (mounted) {
+        final session = Supabase.instance.client.auth.currentSession;
+        final nextWidget = session != null ? const DashboardScreen() : const LoginScreen();
+
         Navigator.of(context).pushReplacement(
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) =>
-                const LoginScreen(),
+            pageBuilder: (context, animation, secondaryAnimation) => nextWidget,
             transitionsBuilder:
                 (context, animation, secondaryAnimation, child) {
                   return FadeTransition(opacity: animation, child: child);

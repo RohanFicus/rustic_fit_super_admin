@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/supabase_service.dart';
 
 class LocationsScreen extends StatefulWidget {
   const LocationsScreen({super.key});
@@ -8,70 +9,120 @@ class LocationsScreen extends StatefulWidget {
 }
 
 class _LocationsScreenState extends State<LocationsScreen> {
-  final List<Map<String, dynamic>> _locations = [
-    {
-      'id': 'LOC001',
-      'city': 'Mumbai',
-      'state': 'Maharashtra',
-      'status': 'Active',
-      'isEnabled': true,
-      'hubs': 12,
-      'pincodes': 45,
-    },
-    {
-      'id': 'LOC002',
-      'city': 'Delhi',
-      'state': 'Delhi NCR',
-      'status': 'Active',
-      'isEnabled': true,
-      'hubs': 8,
-      'pincodes': 32,
-    },
-    {
-      'id': 'LOC003',
-      'city': 'Bangalore',
-      'state': 'Karnataka',
-      'status': 'Active',
-      'isEnabled': true,
-      'hubs': 15,
-      'pincodes': 58,
-    },
-    {
-      'id': 'LOC004',
-      'city': 'Pune',
-      'state': 'Maharashtra',
-      'status': 'Maintenance',
-      'isEnabled': false,
-      'hubs': 5,
-      'pincodes': 14,
-    },
-    {
-      'id': 'LOC005',
-      'city': 'Hyderabad',
-      'state': 'Telangana',
-      'status': 'Active',
-      'isEnabled': true,
-      'hubs': 10,
-      'pincodes': 28,
-    },
-    {
-      'id': 'LOC006',
-      'city': 'Chennai',
-      'state': 'Tamil Nadu',
-      'status': 'Active',
-      'isEnabled': true,
-      'hubs': 9,
-      'pincodes': 35,
-    },
-  ];
+  List<Map<String, dynamic>> _locations = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocations();
+  }
+
+  Future<void> _loadLocations() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await SupabaseService().getLocations();
+      setState(() {
+        _locations = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load locations: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleEnabled(Map<String, dynamic> location, bool val) async {
+    try {
+      await SupabaseService().updateLocation(location['id'].toString(), {
+        'is_enabled': val,
+      });
+      _loadLocations();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update status: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleStatus(Map<String, dynamic> location) async {
+    final curStatus = location['status']?.toString() ?? 'Active';
+    final newStatus = curStatus == 'Active' ? 'Maintenance' : 'Active';
+    try {
+      await SupabaseService().updateLocation(location['id'].toString(), {
+        'status': newStatus,
+      });
+      _loadLocations();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update status: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteLocation(Map<String, dynamic> location) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Location?'),
+        content: Text(
+            'Are you sure you want to delete service for "${location['city']}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await SupabaseService().deleteLocation(location['id'].toString());
+                _loadLocations();
+                if (mounted) Navigator.pop(context);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to delete location: $e'),
+                    backgroundColor: Colors.redAccent,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          spacing: 20,
+          runSpacing: 20,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -90,161 +141,180 @@ class _LocationsScreenState extends State<LocationsScreen> {
                 ),
               ],
             ),
-            ElevatedButton.icon(
-              onPressed: () => _showLocationDialog(),
-              icon: const Icon(Icons.add_location_alt_rounded, size: 20),
-              label: const Text('Add Service City'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6A1B9A),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 15,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            SizedBox(
+              width: MediaQuery.of(context).size.width < 600
+                  ? double.infinity
+                  : null,
+              child: ElevatedButton.icon(
+                onPressed: () => _showLocationDialog(),
+                icon: const Icon(Icons.add_location_alt_rounded, size: 20),
+                label: const Text('Enable New City'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6A1B9A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 15,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 30),
-
-        LayoutBuilder(
-          builder: (context, constraints) {
-            int crossAxisCount = constraints.maxWidth > 1400
-                ? 4
-                : (constraints.maxWidth > 900 ? 3 : 2);
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 20,
-                mainAxisSpacing: 20,
-                childAspectRatio: 1.6,
-              ),
-              itemCount: _locations.length,
-              itemBuilder: (context, index) {
-                return _buildLocationCard(_locations[index], index);
-              },
-            );
-          },
-        ),
+        _isLoading
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(50.0),
+                  child: CircularProgressIndicator(color: Color(0xFF6A1B9A)),
+                ),
+              )
+            : _locations.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(50.0),
+                      child: Text('No service locations registered.'),
+                    ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+                      return GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 400,
+                          mainAxisExtent: isMobile ? 180 : 200,
+                          crossAxisSpacing: 20,
+                          mainAxisSpacing: 20,
+                        ),
+                        itemCount: _locations.length,
+                        itemBuilder: (context, index) {
+                          return _buildLocationCard(_locations[index]);
+                        },
+                      );
+                    },
+                  ),
       ],
     );
   }
 
-  Widget _buildLocationCard(Map<String, dynamic> location, int index) {
-    bool isEnabled = location['isEnabled'];
+  Widget _buildLocationCard(Map<String, dynamic> location) {
+    bool isEnabled = location['is_enabled'] ?? true;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final status = location['status']?.toString() ?? 'Active';
+    final city = location['city'] ?? '';
+    final state = location['state'] ?? '';
+    final hubs = location['hubs_count'] ?? 0;
+    final pincodes = location['pincodes_count'] ?? 0;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 16 : 20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isEnabled ? Colors.white : Colors.grey[100],
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withOpacity(0.02),
             blurRadius: 15,
             offset: const Offset(0, 8),
           ),
         ],
+        border: Border.all(color: Colors.grey[200]!),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: isEnabled ? const Color(0xFFF3E5F5) : Colors.grey[100],
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.location_city_rounded,
-                  color: isEnabled ? const Color(0xFF6A1B9A) : Colors.grey,
-                  size: 24,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    city,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                    ),
+                  ),
+                  Text(
+                    state,
+                    style: TextStyle(
+                      color: Colors.grey[500],
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
               ),
               PopupMenuButton<String>(
                 onSelected: (val) {
-                  if (val == 'edit')
-                    _showLocationDialog(location: location, index: index);
+                  if (val == 'edit') {
+                    _showLocationDialog(location: location);
+                  } else if (val == 'delete') {
+                    _deleteLocation(location);
+                  } else if (val == 'toggle_status') {
+                    _toggleStatus(location);
+                  }
                 },
                 itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'toggle_status',
+                    child: Text(status == 'Active'
+                        ? 'Put in Maintenance'
+                        : 'Set Active'),
+                  ),
                   const PopupMenuItem(
                     value: 'edit',
-                    child: Text('Edit Details', style: TextStyle(fontSize: 13)),
+                    child: Text('Edit Details'),
                   ),
                   const PopupMenuItem(
-                    value: 'settings',
-                    child: Text('Hub Settings', style: TextStyle(fontSize: 13)),
+                    value: 'delete',
+                    child: Text('Delete Location',
+                        style: TextStyle(color: Colors.red)),
                   ),
                 ],
-                icon: const Icon(Icons.more_horiz, color: Colors.grey),
+                icon: const Icon(Icons.more_vert, color: Colors.grey),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            location['city'],
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-              color: isEnabled ? const Color(0xFF333333) : Colors.grey[600],
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildStatsItem('$hubs', 'Hubs'),
+              _buildStatsItem('$pincodes', 'Pincodes'),
+            ],
           ),
-          Text(
-            location['state'],
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
-          ),
-          const Spacer(),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.grey[50],
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildMiniStat('Hubs', location['hubs'].toString()),
-                Container(width: 1, height: 16, color: Colors.grey[200]),
-                _buildMiniStat('Pincodes', location['pincodes'].toString()),
-                Container(width: 1, height: 16, color: Colors.grey[200]),
-                _buildMiniStat(
-                  'Status',
-                  location['status'],
-                  color: _getStatusColor(location['status']),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Accepting Orders',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.grey,
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: status == 'Active'
+                      ? Colors.green[50]
+                      : Colors.orange[50],
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  status.toUpperCase(),
+                  style: TextStyle(
+                    color: status == 'Active' ? Colors.green : Colors.orange,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
-              SizedBox(
-                height: 24,
+              Transform.scale(
+                scale: 0.7,
                 child: Switch(
                   value: isEnabled,
-                  onChanged: (val) {
-                    setState(() {
-                      _locations[index]['isEnabled'] = val;
-                      _locations[index]['status'] = val ? 'Active' : 'Disabled';
-                    });
-                  },
+                  onChanged: (val) => _toggleEnabled(location, val),
                   activeColor: const Color(0xFF6A1B9A),
                 ),
               ),
@@ -255,15 +325,15 @@ class _LocationsScreenState extends State<LocationsScreen> {
     );
   }
 
-  Widget _buildMiniStat(String label, String value, {Color? color}) {
+  Widget _buildStatsItem(String value, String label) {
     return Column(
       children: [
         Text(
           value,
-          style: TextStyle(
+          style: const TextStyle(
+            fontSize: 16,
             fontWeight: FontWeight.bold,
-            fontSize: 13,
-            color: color ?? const Color(0xFF333333),
+            color: Color(0xFF6A1B9A),
           ),
         ),
         Text(
@@ -278,21 +348,25 @@ class _LocationsScreenState extends State<LocationsScreen> {
     );
   }
 
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Active':
-        return Colors.green;
-      case 'Maintenance':
-        return Colors.orange;
-      case 'Disabled':
-        return Colors.red;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  void _showLocationDialog({Map<String, dynamic>? location, int? index}) {
+  void _showLocationDialog({Map<String, dynamic>? location}) {
     final isEditing = location != null;
+    final cityController = TextEditingController(
+      text: isEditing ? location['city'] : '',
+    );
+    final stateController = TextEditingController(
+      text: isEditing ? location['state'] : '',
+    );
+    final hubsController = TextEditingController(
+      text: isEditing ? location['hubs_count']?.toString() : '',
+    );
+    final pincodesController = TextEditingController(
+      text: isEditing ? location['pincodes_count']?.toString() : '',
+    );
+
+    String selectedStatus = isEditing
+        ? (location['status']?.toString() ?? 'Active')
+        : 'Active';
+
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -309,180 +383,219 @@ class _LocationsScreenState extends State<LocationsScreen> {
             opacity: anim1,
             child: AlertDialog(
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(20),
               ),
               contentPadding: EdgeInsets.zero,
-              content: Container(
-                width: 500,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Header
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF6A1B9A),
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(24),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            isEditing
-                                ? Icons.edit_location_alt_rounded
-                                : Icons.add_location_alt_rounded,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                          const SizedBox(width: 16),
-                          Text(
-                            isEditing
-                                ? 'Modify Service City'
-                                : 'Add New Service City',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
+              content: StatefulBuilder(
+                builder: (context, setDialogState) {
+                  return Container(
+                    width: MediaQuery.of(context).size.width * 0.9,
+                    constraints: const BoxConstraints(maxWidth: 500),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF6A1B9A),
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(20),
                             ),
                           ),
-                        ],
-                      ),
-                    ),
-
-                    Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          _buildDialogField(
-                            Icons.location_city_rounded,
-                            'City Name',
-                            'e.g. Hyderabad',
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDialogField(
-                            Icons.map_rounded,
-                            'State / Region',
-                            'e.g. Telangana',
-                          ),
-                          const SizedBox(height: 16),
-                          Row(
+                          child: Row(
                             children: [
-                              Expanded(
-                                child: _buildDialogField(
-                                  Icons.hub_rounded,
-                                  'Operational Hubs',
-                                  'No. of hubs',
-                                ),
+                              const Icon(
+                                Icons.add_location_alt_rounded,
+                                color: Colors.white,
+                                size: 28,
                               ),
                               const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Initial Status',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF333333),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    DropdownButtonFormField<String>(
-                                      decoration: InputDecoration(
-                                        filled: true,
-                                        fillColor: Colors.grey[50],
-                                        contentPadding:
-                                            const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 12,
-                                            ),
-                                        border: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide(
-                                            color: Colors.grey[200]!,
-                                          ),
-                                        ),
-                                        enabledBorder: OutlineInputBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            12,
-                                          ),
-                                          borderSide: BorderSide(
-                                            color: Colors.grey[200]!,
-                                          ),
-                                        ),
-                                      ),
-                                      value: isEditing
-                                          ? location['status']
-                                          : 'Active',
-                                      items:
-                                          ['Active', 'Maintenance', 'Inactive']
-                                              .map(
-                                                (s) => DropdownMenuItem(
-                                                  value: s,
-                                                  child: Text(
-                                                    s,
-                                                    style: const TextStyle(
-                                                      fontSize: 14,
-                                                    ),
-                                                  ),
-                                                ),
-                                              )
-                                              .toList(),
-                                      onChanged: (v) {},
-                                    ),
-                                  ],
+                              Text(
+                                isEditing
+                                    ? 'Edit Service Location'
+                                    : 'Enable Service Location',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 32),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
                             children: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: Text(
-                                  'Cancel',
-                                  style: TextStyle(color: Colors.grey[600]),
-                                ),
+                              _buildDialogField(Icons.location_city,
+                                  'City Name', 'e.g. Mumbai', cityController),
+                              const SizedBox(height: 16),
+                              _buildDialogField(Icons.map_outlined, 'State',
+                                  'e.g. Maharashtra', stateController),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildDialogField(
+                                        Icons.store_rounded,
+                                        'Hubs count',
+                                        'e.g. 5',
+                                        hubsController),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: _buildDialogField(
+                                        Icons.pin_drop_rounded,
+                                        'Pincodes count',
+                                        'e.g. 45',
+                                        pincodesController),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 12),
-                              ElevatedButton(
-                                onPressed: () => Navigator.pop(context),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF6A1B9A),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 32,
-                                    vertical: 16,
+                              const SizedBox(height: 16),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Status',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Color(0xFF333333),
+                                    ),
                                   ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
+                                  const SizedBox(height: 8),
+                                  DropdownButtonFormField<String>(
+                                    decoration: InputDecoration(
+                                      filled: true,
+                                      fillColor: Colors.grey[50],
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                            color: Colors.grey[200]!),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                        borderSide: BorderSide(
+                                            color: Colors.grey[200]!),
+                                      ),
+                                    ),
+                                    value: selectedStatus,
+                                    items: ['Active', 'Maintenance']
+                                        .map(
+                                          (s) => DropdownMenuItem(
+                                            value: s,
+                                            child: Text(
+                                              s,
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ),
+                                        )
+                                        .toList(),
+                                    onChanged: (v) {
+                                      if (v != null) {
+                                        setDialogState(() {
+                                          selectedStatus = v;
+                                        });
+                                      }
+                                    },
                                   ),
-                                  elevation: 0,
-                                ),
-                                child: Text(
-                                  isEditing ? 'Save Changes' : 'Enable Service',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
+                                ],
+                              ),
+                              const SizedBox(height: 32),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton(
+                                    onPressed: () => Navigator.pop(context),
+                                    child: Text(
+                                      'Cancel',
+                                      style: TextStyle(color: Colors.grey[600]),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 12),
+                                  ElevatedButton(
+                                    onPressed: () async {
+                                      if (cityController.text.isNotEmpty &&
+                                          stateController.text.isNotEmpty) {
+                                        final payload = {
+                                          'city': cityController.text.trim(),
+                                          'state': stateController.text.trim(),
+                                          'hubs_count': int.tryParse(
+                                                  hubsController.text) ??
+                                              0,
+                                          'pincodes_count': int.tryParse(
+                                                  pincodesController.text) ??
+                                              0,
+                                          'status': selectedStatus,
+                                          'is_enabled': isEditing
+                                              ? (location['is_enabled'] ??
+                                                  true)
+                                              : true,
+                                        };
+
+                                        try {
+                                          if (isEditing) {
+                                            await SupabaseService()
+                                                .updateLocation(
+                                                    location['id'].toString(),
+                                                    payload);
+                                          } else {
+                                            await SupabaseService()
+                                                .createLocation(payload);
+                                          }
+                                          _loadLocations();
+                                          if (mounted) Navigator.pop(context);
+                                        } catch (e) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                  'Failed to save location: $e'),
+                                              backgroundColor: Colors.redAccent,
+                                              behavior:
+                                                  SnackBarBehavior.floating,
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF6A1B9A),
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 32,
+                                        vertical: 16,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      elevation: 0,
+                                    ),
+                                    child: Text(
+                                      isEditing
+                                          ? 'Save Changes'
+                                          : 'Enable Service',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ),
@@ -491,7 +604,8 @@ class _LocationsScreenState extends State<LocationsScreen> {
     );
   }
 
-  Widget _buildDialogField(IconData icon, String label, String hint) {
+  Widget _buildDialogField(
+      IconData icon, String label, String hint, TextEditingController ctrl) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -505,6 +619,7 @@ class _LocationsScreenState extends State<LocationsScreen> {
         ),
         const SizedBox(height: 8),
         TextField(
+          controller: ctrl,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/supabase_service.dart';
 
 class TailorsScreen extends StatefulWidget {
   const TailorsScreen({super.key});
@@ -8,86 +9,103 @@ class TailorsScreen extends StatefulWidget {
 }
 
 class _TailorsScreenState extends State<TailorsScreen> {
-  final List<Map<String, dynamic>> _tailors = [
-    {
-      'id': 'T001',
-      'name': 'Master Ji',
-      'specialization': 'Men\'s Suits, Sherwanis',
-      'experience': '15 Years',
-      'active_orders': 4,
-      'rating': 4.9,
-      'status': 'Active',
-      'image': 'https://i.pravatar.cc/150?u=T001',
-    },
-    {
-      'id': 'T002',
-      'name': 'Anita Devi',
-      'specialization': 'Lehengas, Blouses',
-      'experience': '8 Years',
-      'active_orders': 2,
-      'rating': 4.7,
-      'status': 'Active',
-      'image': 'https://i.pravatar.cc/150?u=T002',
-    },
-    {
-      'id': 'T003',
-      'name': 'Rajesh Tailor',
-      'specialization': 'Shirts, Trousers',
-      'experience': '10 Years',
-      'active_orders': 0,
-      'rating': 4.5,
-      'status': 'On Leave',
-      'image': 'https://i.pravatar.cc/150?u=T003',
-    },
-    {
-      'id': 'T004',
-      'name': 'Sunita Wilson',
-      'specialization': 'Evening Gowns',
-      'experience': '6 Years',
-      'active_orders': 3,
-      'rating': 4.8,
-      'status': 'Active',
-      'image': 'https://i.pravatar.cc/150?u=T004',
-    },
-    {
-      'id': 'T005',
-      'name': 'Vikram Singh',
-      'specialization': 'Uniforms',
-      'experience': '5 Years',
-      'active_orders': 1,
-      'rating': 4.2,
-      'status': 'Active',
-      'image': 'https://i.pravatar.cc/150?u=T005',
-    },
-    {
-      'id': 'T004',
-      'name': 'Sunita Wilson',
-      'specialization': 'Evening Gowns',
-      'experience': '6 Years',
-      'active_orders': 3,
-      'rating': 4.8,
-      'status': 'Active',
-      'image': 'https://i.pravatar.cc/150?u=T004',
-    },
-    {
-      'id': 'T005',
-      'name': 'Vikram Singh',
-      'specialization': 'Uniforms',
-      'experience': '5 Years',
-      'active_orders': 1,
-      'rating': 4.2,
-      'status': 'Active',
-      'image': 'https://i.pravatar.cc/150?u=T005',
-    },
-  ];
+  List<Map<String, dynamic>> _tailors = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTailors();
+  }
+
+  Future<void> _loadTailors() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await SupabaseService().getTailors();
+      setState(() {
+        _tailors = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load tailors: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleStatus(Map<String, dynamic> tailor) async {
+    final currentStatus = tailor['status']?.toString() ?? 'Active';
+    final newStatus = currentStatus == 'Active' ? 'On Leave' : 'Active';
+    try {
+      await SupabaseService().updateTailor(tailor['id'].toString(), {
+        'status': newStatus,
+      });
+      _loadTailors();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update status: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteTailor(Map<String, dynamic> tailor) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Tailor?'),
+        content: Text(
+            'Are you sure you want to remove tailor "${tailor['name']}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await SupabaseService().deleteTailor(tailor['id'].toString());
+                _loadTailors();
+                if (mounted) Navigator.pop(context);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to remove tailor: $e'),
+                    backgroundColor: Colors.redAccent,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          spacing: 20,
+          runSpacing: 20,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,56 +124,76 @@ class _TailorsScreenState extends State<TailorsScreen> {
                 ),
               ],
             ),
-            ElevatedButton.icon(
-              onPressed: () => _showAddTailorDialog(context),
-              icon: const Icon(Icons.person_add_rounded, size: 20),
-              label: const Text('Add New Tailor'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6A1B9A),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 15,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            SizedBox(
+              width: MediaQuery.of(context).size.width < 600
+                  ? double.infinity
+                  : null,
+              child: ElevatedButton.icon(
+                onPressed: () => _showAddTailorDialog(context),
+                icon: const Icon(Icons.person_add_rounded, size: 20),
+                label: const Text('Add New Tailor'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6A1B9A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 15,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 30),
-
-        LayoutBuilder(
-          builder: (context, constraints) {
-            int crossAxisCount = constraints.maxWidth > 1400
-                ? 6
-                : (constraints.maxWidth > 900 ? 4 : 3);
-            return GridView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: crossAxisCount,
-                crossAxisSpacing: 20,
-                mainAxisSpacing: 20,
-                childAspectRatio: 1.4,
-              ),
-              itemCount: _tailors.length,
-              itemBuilder: (context, index) {
-                return _buildTailorCard(_tailors[index]);
-              },
-            );
-          },
-        ),
+        _isLoading
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(50.0),
+                  child: CircularProgressIndicator(color: Color(0xFF6A1B9A)),
+                ),
+              )
+            : _tailors.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(50.0),
+                      child: Text('No tailors registered.'),
+                    ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+                      return GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 450,
+                          mainAxisExtent: isMobile ? 180 : 240,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                        itemCount: _tailors.length,
+                        itemBuilder: (context, index) {
+                          return _buildTailorCard(_tailors[index]);
+                        },
+                      );
+                    },
+                  ),
       ],
     );
   }
 
   Widget _buildTailorCard(Map<String, dynamic> tailor) {
     bool isActive = tailor['status'] == 'Active';
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final rating = tailor['rating']?.toString() ?? '5.0';
+    final experience = tailor['experience']?.toString() ?? '0 Years';
+    final imageUrl = tailor['image_url']?.toString() ?? '';
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
@@ -168,13 +206,22 @@ class _TailorsScreenState extends State<TailorsScreen> {
         ],
       ),
       child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                radius: 24,
-                backgroundImage: NetworkImage(tailor['image']),
+                radius: isMobile ? 20 : 24,
+                backgroundColor: const Color(0xFFF3E5F5),
+                backgroundImage:
+                    imageUrl.isNotEmpty ? NetworkImage(imageUrl) : null,
+                child: imageUrl.isEmpty
+                    ? Text(
+                        tailor['name'] != null ? tailor['name'][0] : 'T',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      )
+                    : null,
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -182,42 +229,49 @@ class _TailorsScreenState extends State<TailorsScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      tailor['name'],
-                      style: const TextStyle(
-                        fontSize: 16,
+                      tailor['name'] ?? '',
+                      style: TextStyle(
+                        fontSize: isMobile ? 14 : 16,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      tailor['specialization'],
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                      tailor['specialization'] ?? 'General Tailoring',
+                      style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: isMobile ? 11 : 12),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isActive ? Colors.green[50] : Colors.orange[50],
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  tailor['status'].toUpperCase(),
-                  style: TextStyle(
-                    color: isActive ? Colors.green : Colors.orange,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
+              PopupMenuButton<String>(
+                onSelected: (val) {
+                  if (val == 'delete') {
+                    _deleteTailor(tailor);
+                  } else if (val == 'toggle') {
+                    _toggleStatus(tailor);
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'toggle',
+                    child: Text(
+                        isActive ? 'Mark as On Leave' : 'Mark as Active'),
                   ),
-                ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete Tailor', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+                icon: const Icon(Icons.more_vert, color: Colors.grey),
               ),
             ],
           ),
-          const Spacer(),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(isMobile ? 8 : 12),
             decoration: BoxDecoration(
               color: Colors.grey[50],
               borderRadius: BorderRadius.circular(12),
@@ -225,37 +279,36 @@ class _TailorsScreenState extends State<TailorsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildStatItem('Exp', tailor['experience']),
-                _buildStatItem('Orders', tailor['active_orders'].toString()),
-                _buildStatItem('Rating', '⭐ ${tailor['rating']}'),
+                _buildStatItem('Exp', experience),
+                _buildStatItem('Rating', '⭐ $rating'),
               ],
             ),
           ),
-          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: OutlinedButton(
                   onPressed: () {},
                   style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 12),
                     side: BorderSide(color: Colors.grey[200]!),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Profile',
-                    style: TextStyle(fontSize: 12, color: Colors.black87),
+                    style: TextStyle(
+                        fontSize: isMobile ? 11 : 12, color: Colors.black87),
                   ),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () => _toggleStatus(tailor),
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 12),
                     backgroundColor: const Color(0xFF6A1B9A).withOpacity(0.1),
                     foregroundColor: const Color(0xFF6A1B9A),
                     elevation: 0,
@@ -263,9 +316,11 @@ class _TailorsScreenState extends State<TailorsScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  child: const Text(
-                    'Manage',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                  child: Text(
+                    isActive ? 'Leave' : 'Activate',
+                    style: TextStyle(
+                        fontSize: isMobile ? 11 : 12,
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -300,6 +355,13 @@ class _TailorsScreenState extends State<TailorsScreen> {
   }
 
   void _showAddTailorDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    final specController = TextEditingController();
+    final expController = TextEditingController();
+    final phoneController = TextEditingController();
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -320,7 +382,8 @@ class _TailorsScreenState extends State<TailorsScreen> {
               ),
               contentPadding: EdgeInsets.zero,
               content: Container(
-                width: 500,
+                width: MediaQuery.of(context).size.width * 0.9,
+                constraints: const BoxConstraints(maxWidth: 500),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(20),
@@ -328,7 +391,6 @@ class _TailorsScreenState extends State<TailorsScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header
                     Container(
                       padding: const EdgeInsets.all(24),
                       decoration: const BoxDecoration(
@@ -356,7 +418,6 @@ class _TailorsScreenState extends State<TailorsScreen> {
                         ],
                       ),
                     ),
-
                     Padding(
                       padding: const EdgeInsets.all(24),
                       child: Column(
@@ -365,12 +426,14 @@ class _TailorsScreenState extends State<TailorsScreen> {
                             Icons.person_outline_rounded,
                             'Full Name',
                             'e.g. Master Ji',
+                            nameController,
                           ),
                           const SizedBox(height: 16),
                           _buildDialogField(
                             Icons.star_outline_rounded,
                             'Specialization',
                             'e.g. Suits, Lehengas',
+                            specController,
                           ),
                           const SizedBox(height: 16),
                           Row(
@@ -379,7 +442,8 @@ class _TailorsScreenState extends State<TailorsScreen> {
                                 child: _buildDialogField(
                                   Icons.history_rounded,
                                   'Experience',
-                                  'Years',
+                                  'e.g. 5 Years',
+                                  expController,
                                 ),
                               ),
                               const SizedBox(width: 16),
@@ -388,9 +452,24 @@ class _TailorsScreenState extends State<TailorsScreen> {
                                   Icons.phone_iphone_rounded,
                                   'Phone',
                                   '+91',
+                                  phoneController,
                                 ),
                               ),
                             ],
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDialogField(
+                            Icons.alternate_email_rounded,
+                            'Email Address (Credentials)',
+                            'tailor@ruscfit.com',
+                            emailController,
+                          ),
+                          const SizedBox(height: 16),
+                          _buildDialogField(
+                            Icons.lock_outline_rounded,
+                            'Password (Credentials)',
+                            '••••••••',
+                            passwordController,
                           ),
                           const SizedBox(height: 24),
                           Row(
@@ -405,7 +484,56 @@ class _TailorsScreenState extends State<TailorsScreen> {
                               ),
                               const SizedBox(width: 12),
                               ElevatedButton(
-                                onPressed: () => Navigator.pop(context),
+                                onPressed: () async {
+                                  if (nameController.text.isNotEmpty &&
+                                      emailController.text.isNotEmpty &&
+                                      passwordController.text.isNotEmpty) {
+                                    try {
+                                      // 1. Register Auth credentials
+                                      final uid = await SupabaseService()
+                                          .registerUserCredentials(
+                                        emailController.text.trim(),
+                                        passwordController.text,
+                                      );
+
+                                      // 2. Create Tailor profile linked via uid
+                                      final payload = {
+                                        'id': uid,
+                                        'name': nameController.text.trim(),
+                                        'email': emailController.text.trim(),
+                                        'specialization':
+                                            specController.text.trim(),
+                                        'experience': expController.text.trim(),
+                                        'status': 'Active',
+                                        'rating': 5.0,
+                                      };
+                                      await SupabaseService()
+                                          .createTailor(payload);
+                                      _loadTailors();
+                                      if (mounted) Navigator.pop(context);
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                              'Failed to register tailor credentials: $e'),
+                                          backgroundColor: Colors.redAccent,
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
+                                  } else {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Name, Email and Password are required.'),
+                                        backgroundColor: Colors.orangeAccent,
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                },
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: const Color(0xFF6A1B9A),
                                   foregroundColor: Colors.white,
@@ -437,7 +565,8 @@ class _TailorsScreenState extends State<TailorsScreen> {
     );
   }
 
-  Widget _buildDialogField(IconData icon, String label, String hint) {
+  Widget _buildDialogField(
+      IconData icon, String label, String hint, TextEditingController ctrl) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -451,6 +580,7 @@ class _TailorsScreenState extends State<TailorsScreen> {
         ),
         const SizedBox(height: 8),
         TextField(
+          controller: ctrl,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),

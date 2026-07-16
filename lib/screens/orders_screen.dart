@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/supabase_service.dart';
 
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
@@ -18,72 +19,79 @@ class _OrdersScreenState extends State<OrdersScreen> {
     'Delivered',
   ];
 
-  final List<Map<String, dynamic>> _allOrders = [
-    {
-      'id': '#ORD-7241',
-      'customer': 'Rahul Sharma',
-      'item': 'Slim Fit Suit',
-      'status': 'In Tailoring',
-      'amount': '₹8,500',
-      'date': '24 Oct, 2023',
-      'tailor': 'Master Ji',
-      'priority': 'High',
-    },
-    {
-      'id': '#ORD-7242',
-      'customer': 'Priya Singh',
-      'item': 'Silk Lehenga',
-      'status': 'Assigned',
-      'amount': '₹12,400',
-      'date': '24 Oct, 2023',
-      'tailor': 'Anita Devi',
-      'priority': 'Medium',
-    },
-    {
-      'id': '#ORD-7243',
-      'customer': 'Amit Verma',
-      'item': 'Cotton Shirt',
-      'status': 'New',
-      'amount': '₹1,200',
-      'date': '25 Oct, 2023',
-      'tailor': 'Unassigned',
-      'priority': 'Low',
-    },
-    {
-      'id': '#ORD-7244',
-      'customer': 'Sanya Malhotra',
-      'item': 'Evening Gown',
-      'status': 'Ready',
-      'amount': '₹15,000',
-      'date': '23 Oct, 2023',
-      'tailor': 'Rajesh Tailor',
-      'priority': 'High',
-    },
-    {
-      'id': '#ORD-7245',
-      'customer': 'Vikram Rao',
-      'item': 'Wedding Sherwani',
-      'status': 'Delivered',
-      'amount': '₹22,000',
-      'date': '20 Oct, 2023',
-      'tailor': 'Master Ji',
-      'priority': 'Medium',
-    },
-  ];
+  List<Map<String, dynamic>> _allOrders = [];
+  bool _isLoading = true;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOrders();
+    _searchController.addListener(() {
+      setState(() {
+        _searchQuery = _searchController.text.trim().toLowerCase();
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadOrders() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await SupabaseService().getOrders();
+      setState(() {
+        _allOrders = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load orders: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    List<Map<String, dynamic>> filteredOrders = _selectedFilter == 'All'
-        ? _allOrders
-        : _allOrders
-              .where((order) => order['status'] == _selectedFilter)
-              .toList();
+    // Filter and search
+    List<Map<String, dynamic>> filteredOrders = _allOrders.where((order) {
+      final statusMatch = _selectedFilter == 'All' ||
+          (order['status']?.toString().toLowerCase() ==
+              _selectedFilter.toLowerCase());
+
+      final customerObj = order['customers'];
+      final customerName = customerObj is Map
+          ? (customerObj['name']?.toString().toLowerCase() ?? '')
+          : '';
+      final orderNumber = order['order_number']?.toString().toLowerCase() ?? '';
+      final itemDetails = order['item_details']?.toString().toLowerCase() ?? '';
+
+      final searchMatch = _searchQuery.isEmpty ||
+          customerName.contains(_searchQuery) ||
+          orderNumber.contains(_searchQuery) ||
+          itemDetails.contains(_searchQuery);
+
+      return statusMatch && searchMatch;
+    }).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          spacing: 20,
+          runSpacing: 20,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -102,23 +110,29 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 ),
               ],
             ),
-            Row(
+            Wrap(
+              spacing: 16,
+              runSpacing: 16,
               children: [
-                _buildSearchBar(),
-                const SizedBox(width: 16),
-                ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.add_rounded, size: 20),
-                  label: const Text('Create Order'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF6A1B9A),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 15,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                _buildSearchBar(context),
+                SizedBox(
+                  width: MediaQuery.of(context).size.width < 600
+                      ? double.infinity
+                      : null,
+                  child: ElevatedButton.icon(
+                    onPressed: () {},
+                    icon: const Icon(Icons.add_rounded, size: 20),
+                    label: const Text('Create Order'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF6A1B9A),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 15,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
                 ),
@@ -129,51 +143,57 @@ class _OrdersScreenState extends State<OrdersScreen> {
         const SizedBox(height: 25),
 
         // Filter & Summary Stats
-        Row(
+        Wrap(
+          spacing: 16,
+          runSpacing: 16,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Expanded(
-              child: SizedBox(
-                height: 45,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _filters.length,
-                  itemBuilder: (context, index) {
-                    final filter = _filters[index];
-                    final isSelected = _selectedFilter == filter;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: FilterChip(
-                        label: Text(filter),
-                        selected: isSelected,
-                        onSelected: (selected) =>
-                            setState(() => _selectedFilter = filter),
-                        backgroundColor: Colors.white,
-                        selectedColor: const Color(0xFF6A1B9A).withOpacity(0.1),
-                        labelStyle: TextStyle(
+            SizedBox(
+              width: MediaQuery.of(context).size.width < 1100
+                  ? (MediaQuery.of(context).size.width < 600
+                      ? double.infinity
+                      : 400)
+                  : 600,
+              height: 45,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _filters.length,
+                itemBuilder: (context, index) {
+                  final filter = _filters[index];
+                  final isSelected = _selectedFilter == filter;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: FilterChip(
+                      label: Text(filter),
+                      selected: isSelected,
+                      onSelected: (selected) =>
+                          setState(() => _selectedFilter = filter),
+                      backgroundColor: Colors.white,
+                      selectedColor: const Color(0xFF6A1B9A).withOpacity(0.1),
+                      labelStyle: TextStyle(
+                        color: isSelected
+                            ? const Color(0xFF6A1B9A)
+                            : Colors.grey[700],
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        fontSize: 13,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(
                           color: isSelected
                               ? const Color(0xFF6A1B9A)
-                              : Colors.grey[700],
-                          fontWeight: isSelected
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                          fontSize: 13,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          side: BorderSide(
-                            color: isSelected
-                                ? const Color(0xFF6A1B9A)
-                                : Colors.grey[200]!,
-                          ),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
+                              : Colors.grey[200]!,
                         ),
                       ),
-                    );
-                  },
-                ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
             Container(
@@ -184,6 +204,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 border: Border.all(color: Colors.grey[200]!),
               ),
               child: const Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(Icons.filter_list_rounded, size: 18, color: Colors.grey),
                   SizedBox(width: 8),
@@ -215,113 +236,132 @@ class _OrdersScreenState extends State<OrdersScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minWidth: constraints.maxWidth,
+              _isLoading
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(50.0),
+                        child:
+                            CircularProgressIndicator(color: Color(0xFF6A1B9A)),
                       ),
-                      child: DataTable(
-                        headingRowHeight: 56,
-                        dataRowHeight: 72,
-                        horizontalMargin: 24,
-                        columnSpacing: 24,
-                        headingRowColor: MaterialStateProperty.all(
-                          Colors.grey[50],
+                    )
+                  : filteredOrders.isEmpty
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(50.0),
+                            child: Text('No orders found.'),
+                          ),
+                        )
+                      : LayoutBuilder(
+                          builder: (context, constraints) {
+                            return SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: ConstrainedBox(
+                                constraints: BoxConstraints(
+                                  minWidth: constraints.maxWidth,
+                                ),
+                                child: DataTable(
+                                  headingRowHeight: 56,
+                                  dataRowHeight: 72,
+                                  horizontalMargin: 24,
+                                  columnSpacing: 24,
+                                  headingRowColor: MaterialStateProperty.all(
+                                    Colors.grey[50],
+                                  ),
+                                  columns: const [
+                                    DataColumn(
+                                      label: Text(
+                                        'ORDER INFO',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'CUSTOMER',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'ITEM DETAILS',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'ASSIGNED TAILOR',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'STATUS',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'AMOUNT',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                    DataColumn(
+                                      label: Text(
+                                        'ACTIONS',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                          color: Colors.grey,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                  rows: filteredOrders
+                                      .map((order) => _buildOrderRow(order))
+                                      .toList(),
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                        columns: const [
-                          DataColumn(
-                            label: Text(
-                              'ORDER INFO',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'CUSTOMER',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'ITEM DETAILS',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'ASSIGNED TAILOR',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'STATUS',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'AMOUNT',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'ACTIONS',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                        ],
-                        rows: filteredOrders
-                            .map((order) => _buildOrderRow(order))
-                            .toList(),
-                      ),
-                    ),
-                  );
-                },
-              ),
               // Pagination Placeholder
               Padding(
                 padding: const EdgeInsets.all(20),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Wrap(
+                  spacing: 20,
+                  runSpacing: 20,
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
                       'Showing 1 to ${filteredOrders.length} of ${filteredOrders.length} entries',
                       style: TextStyle(color: Colors.grey[600], fontSize: 13),
                     ),
                     Row(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
                         _buildPageButton(Icons.chevron_left_rounded, false),
                         const SizedBox(width: 8),
@@ -340,17 +380,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
-  Widget _buildSearchBar() {
+  Widget _buildSearchBar(BuildContext context) {
     return Container(
-      width: 320,
+      width: MediaQuery.of(context).size.width < 600 ? double.infinity : 320,
       height: 45,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey[200]!),
       ),
-      child: const TextField(
-        decoration: InputDecoration(
+      child: TextField(
+        controller: _searchController,
+        decoration: const InputDecoration(
           hintText: 'Search by Order ID or Name...',
           hintStyle: TextStyle(fontSize: 14, color: Colors.grey),
           prefixIcon: Icon(Icons.search_rounded, color: Colors.grey, size: 20),
@@ -363,7 +404,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   DataRow _buildOrderRow(Map<String, dynamic> order) {
     Color statusColor;
-    switch (order['status']) {
+    final status = order['status']?.toString() ?? 'New';
+    switch (status) {
       case 'New':
         statusColor = Colors.blue;
         break;
@@ -383,6 +425,25 @@ class _OrdersScreenState extends State<OrdersScreen> {
         statusColor = Colors.grey;
     }
 
+    final orderNumber = order['order_number'] ?? '#ORD-0000';
+    final rawDate = order['created_at']?.toString() ?? '';
+    final dateStr = rawDate.length >= 10 ? rawDate.substring(0, 10) : 'Recent';
+
+    final customerObj = order['customers'];
+    final customerName = customerObj is Map
+        ? (customerObj['name']?.toString() ?? 'Unknown')
+        : 'Unknown';
+
+    final itemDetails = order['item_details']?.toString() ?? '';
+
+    final tailorObj = order['tailors'];
+    final tailorName = tailorObj is Map
+        ? (tailorObj['name']?.toString() ?? 'Unassigned')
+        : 'Unassigned';
+
+    final priority = order['priority']?.toString() ?? 'Medium';
+    final amount = order['amount']?.toString() ?? '0';
+
     return DataRow(
       cells: [
         DataCell(
@@ -391,14 +452,14 @@ class _OrdersScreenState extends State<OrdersScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                order['id'],
+                orderNumber,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF6A1B9A),
                 ),
               ),
               Text(
-                order['date'],
+                dateStr,
                 style: TextStyle(fontSize: 11, color: Colors.grey[500]),
               ),
             ],
@@ -411,7 +472,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 radius: 14,
                 backgroundColor: const Color(0xFFF3E5F5),
                 child: Text(
-                  order['customer'][0],
+                  customerName.isNotEmpty ? customerName[0] : 'U',
                   style: const TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.bold,
@@ -421,7 +482,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ),
               const SizedBox(width: 10),
               Text(
-                order['customer'],
+                customerName,
                 style: const TextStyle(fontWeight: FontWeight.w500),
               ),
             ],
@@ -433,13 +494,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                order['item'],
+                itemDetails,
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),
               ),
-              if (order['priority'] == 'High')
+              if (priority == 'High')
                 Container(
                   margin: const EdgeInsets.only(top: 4),
                   padding: const EdgeInsets.symmetric(
@@ -463,7 +524,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           ),
         ),
         DataCell(
-          order['tailor'] == 'Unassigned'
+          tailorName == 'Unassigned'
               ? TextButton(
                   onPressed: () {},
                   child: const Text(
@@ -483,7 +544,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       color: Colors.grey,
                     ),
                     const SizedBox(width: 6),
-                    Text(order['tailor'], style: const TextStyle(fontSize: 13)),
+                    Text(tailorName, style: const TextStyle(fontSize: 13)),
                   ],
                 ),
         ),
@@ -495,7 +556,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
-              order['status'],
+              status,
               style: TextStyle(
                 color: statusColor,
                 fontSize: 11,
@@ -506,7 +567,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
         ),
         DataCell(
           Text(
-            order['amount'],
+            '₹$amount',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/supabase_service.dart';
 
 class DeliveryPartnersScreen extends StatefulWidget {
   const DeliveryPartnersScreen({super.key});
@@ -8,52 +9,122 @@ class DeliveryPartnersScreen extends StatefulWidget {
 }
 
 class _DeliveryPartnersScreenState extends State<DeliveryPartnersScreen> {
-  final List<Map<String, dynamic>> _partners = [
-    {
-      'id': 'DP001',
-      'name': 'Suresh Kumar',
-      'vehicle': 'Hero Splendor (Bike)',
-      'number': 'DL 3S AB 1234',
-      'phone': '+91 9876543210',
-      'address': 'H.No 123, Sector 15, Rohini, Delhi',
-      'status': 'On Duty',
-      'orders_today': 8,
-      'rating': 4.8,
-      'isBlocked': false,
-    },
-    {
-      'id': 'DP002',
-      'name': 'Mohit Verma',
-      'vehicle': 'Honda Activa (Scooter)',
-      'number': 'DL 8C XY 5678',
-      'phone': '+91 9876543211',
-      'address': 'Plot 45, Gali No 2, Laxmi Nagar, Delhi',
-      'status': 'Off Duty',
-      'orders_today': 0,
-      'rating': 4.5,
-      'isBlocked': false,
-    },
-    {
-      'id': 'DP003',
-      'name': 'Rahul Yadav',
-      'vehicle': 'Mahindra Treo (Auto)',
-      'number': 'DL 1G PQ 9012',
-      'phone': '+91 9876543212',
-      'address': 'B-42, Janakpuri, New Delhi',
-      'status': 'On Duty',
-      'orders_today': 5,
-      'rating': 4.9,
-      'isBlocked': true,
-    },
-  ];
+  List<Map<String, dynamic>> _partners = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPartners();
+  }
+
+  Future<void> _loadPartners() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await SupabaseService().getDeliveryPartners();
+      setState(() {
+        _partners = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load delivery partners: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleDutyStatus(Map<String, dynamic> partner) async {
+    final currentStatus = partner['status']?.toString() ?? 'On Duty';
+    final newStatus = currentStatus == 'On Duty' ? 'Off Duty' : 'On Duty';
+    try {
+      await SupabaseService().updateDeliveryPartner(partner['id'].toString(), {
+        'status': newStatus,
+      });
+      _loadPartners();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update status: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleBlockedStatus(
+      Map<String, dynamic> partner, bool isBlocked) async {
+    try {
+      await SupabaseService().updateDeliveryPartner(partner['id'].toString(), {
+        'is_blocked': isBlocked,
+      });
+      _loadPartners();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update restriction: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deletePartner(Map<String, dynamic> partner) async {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove Partner?'),
+        content: Text(
+            'Are you sure you want to remove delivery partner "${partner['name']}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              try {
+                await SupabaseService()
+                    .deleteDeliveryPartner(partner['id'].toString());
+                _loadPartners();
+                if (mounted) Navigator.pop(context);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to remove partner: $e'),
+                    backgroundColor: Colors.redAccent,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          spacing: 20,
+          runSpacing: 20,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -72,443 +143,228 @@ class _DeliveryPartnersScreenState extends State<DeliveryPartnersScreen> {
                 ),
               ],
             ),
-            ElevatedButton.icon(
-              onPressed: () => _showAddPartnerDialog(context),
-              icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
-              label: const Text('Add Delivery Partner'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6A1B9A),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 15,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            SizedBox(
+              width: MediaQuery.of(context).size.width < 600
+                  ? double.infinity
+                  : null,
+              child: ElevatedButton.icon(
+                onPressed: () => _showAddPartnerDialog(context),
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 20),
+                label: const Text('Add Delivery Partner'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6A1B9A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 15,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 30),
-
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.03),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              LayoutBuilder(
-                builder: (context, constraints) {
-                  return SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        minWidth: constraints.maxWidth,
-                      ),
-                      child: DataTable(
-                        headingRowHeight: 56,
-                        dataRowHeight: 72,
-                        horizontalMargin: 24,
-                        columnSpacing: 24,
-                        headingRowColor: MaterialStateProperty.all(
-                          Colors.grey[50],
-                        ),
-                        columns: const [
-                          DataColumn(
-                            label: Text(
-                              'PARTNER INFO',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'VEHICLE DETAILS',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'CONTACT',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'STATUS',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'PERFORMANCE',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                          DataColumn(
-                            label: Text(
-                              'ACTIONS',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                        ],
-                        rows: _partners
-                            .map((partner) => _buildPartnerRow(partner))
-                            .toList(),
-                      ),
+        _isLoading
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(50.0),
+                  child: CircularProgressIndicator(color: Color(0xFF6A1B9A)),
+                ),
+              )
+            : _partners.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(50.0),
+                      child: Text('No delivery partners found.'),
                     ),
-                  );
-                },
-              ),
-            ],
-          ),
-        ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+                      return GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 450,
+                          mainAxisExtent: isMobile ? 220 : 260,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
+                        ),
+                        itemCount: _partners.length,
+                        itemBuilder: (context, index) {
+                          return _buildPartnerCard(_partners[index]);
+                        },
+                      );
+                    },
+                  ),
       ],
     );
   }
 
-  DataRow _buildPartnerRow(Map<String, dynamic> partner) {
+  Widget _buildPartnerCard(Map<String, dynamic> partner) {
     bool isOnDuty = partner['status'] == 'On Duty';
-    bool isBlocked = partner['isBlocked'];
+    bool isBlocked = partner['is_blocked'] ?? false;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final rating = partner['rating']?.toString() ?? '5.0';
 
-    return DataRow(
-      cells: [
-        DataCell(
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 12 : 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+        border: isBlocked ? Border.all(color: Colors.red[200]!) : null,
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                radius: 16,
-                backgroundColor: isBlocked
-                    ? Colors.red[50]
-                    : const Color(0xFFF3E5F5),
+                radius: isMobile ? 20 : 24,
+                backgroundColor: isBlocked ? Colors.red[50] : const Color(0xFFF3E5F5),
                 child: Text(
-                  partner['name'][0],
+                  partner['name'] != null ? partner['name'][0] : 'D',
                   style: TextStyle(
-                    fontSize: 12,
                     fontWeight: FontWeight.bold,
                     color: isBlocked ? Colors.red : const Color(0xFF6A1B9A),
                   ),
                 ),
               ),
               const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    partner['name'],
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                  Text(
-                    partner['id'],
-                    style: TextStyle(color: Colors.grey[500], fontSize: 11),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-        DataCell(
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(
-                partner['vehicle'],
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Text(
-                partner['number'],
-                style: TextStyle(color: Colors.grey[500], fontSize: 11),
-              ),
-            ],
-          ),
-        ),
-        DataCell(Text(partner['phone'], style: const TextStyle(fontSize: 13))),
-        DataCell(
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: isBlocked
-                  ? Colors.red[50]
-                  : (isOnDuty ? Colors.green[50] : Colors.grey[100]),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              isBlocked ? 'BLOCKED' : partner['status'].toUpperCase(),
-              style: TextStyle(
-                color: isBlocked
-                    ? Colors.red
-                    : (isOnDuty ? Colors.green : Colors.grey[600]),
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ),
-        DataCell(
-          Row(
-            children: [
-              const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-              const SizedBox(width: 4),
-              Text(
-                partner['rating'].toString(),
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '(${partner['orders_today']} today)',
-                style: TextStyle(color: Colors.grey[500], fontSize: 11),
-              ),
-            ],
-          ),
-        ),
-        DataCell(
-          Row(
-            children: [
-              IconButton(
-                icon: const Icon(
-                  Icons.visibility_outlined,
-                  size: 20,
-                  color: Colors.grey,
-                ),
-                onPressed: () => _showPartnerDetailsDialog(context, partner),
-                tooltip: 'View Profile',
-              ),
-              IconButton(
-                icon: Icon(
-                  isBlocked
-                      ? Icons.check_circle_outline_rounded
-                      : Icons.block_flipped,
-                  size: 20,
-                  color: isBlocked ? Colors.green : Colors.redAccent,
-                ),
-                onPressed: () {
-                  setState(() => partner['isBlocked'] = !isBlocked);
-                },
-                tooltip: isBlocked ? 'Unblock' : 'Block',
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showAddPartnerDialog(BuildContext context) {
-    showGeneralDialog(
-      context: context,
-      barrierDismissible: true,
-      barrierLabel: '',
-      transitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (context, anim1, anim2) => Container(),
-      transitionBuilder: (context, anim1, anim2, child) {
-        return Transform.scale(
-          scale: CurvedAnimation(
-            parent: anim1,
-            curve: Curves.easeOutBack,
-          ).value.clamp(0.8, 1.0),
-          child: FadeTransition(
-            opacity: anim1,
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              contentPadding: EdgeInsets.zero,
-              content: Container(
-                width: 600,
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                ),
+              Expanded(
                 child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF6A1B9A),
-                        borderRadius: BorderRadius.vertical(
-                          top: Radius.circular(20),
-                        ),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(
-                            Icons.local_shipping_rounded,
-                            color: Colors.white,
-                            size: 28,
-                          ),
-                          SizedBox(width: 16),
-                          Text(
-                            'Register Delivery Partner',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      partner['name'] ?? '',
+                      style: TextStyle(
+                        fontSize: isMobile ? 14 : 16,
+                        fontWeight: FontWeight.bold,
+                        color: isBlocked ? Colors.grey : Colors.black87,
                       ),
                     ),
-                    Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Column(
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildDialogField(
-                                  Icons.person_outline_rounded,
-                                  'Full Name',
-                                  'Name',
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildDialogField(
-                                  Icons.phone_iphone_rounded,
-                                  'Phone Number',
-                                  '+91',
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          _buildDialogField(
-                            Icons.location_on_outlined,
-                            'Residence Address',
-                            'Full Address',
-                          ),
-                          const SizedBox(height: 24),
-                          const Row(
-                            children: [
-                              Expanded(child: Divider()),
-                              Padding(
-                                padding: EdgeInsets.symmetric(horizontal: 16),
-                                child: Text(
-                                  'VEHICLE INFORMATION',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                              ),
-                              Expanded(child: Divider()),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _buildDialogField(
-                                  Icons.directions_bike_rounded,
-                                  'Vehicle Type',
-                                  'e.g. Bike',
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: _buildDialogField(
-                                  Icons.badge_outlined,
-                                  'Registration No.',
-                                  'DL XX XXXX',
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 32),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              TextButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: Text(
-                                  'Cancel',
-                                  style: TextStyle(color: Colors.grey[600]),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              ElevatedButton(
-                                onPressed: () => Navigator.pop(context),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF6A1B9A),
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 32,
-                                    vertical: 16,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Add Partner',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                    const SizedBox(height: 2),
+                    Text(
+                      partner['vehicle'] ?? 'Delivery Executive',
+                      style: TextStyle(
+                          color: Colors.grey[600],
+                          fontSize: isMobile ? 11 : 12),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-            ),
+              PopupMenuButton<String>(
+                onSelected: (val) {
+                  if (val == 'delete') {
+                    _deletePartner(partner);
+                  } else if (val == 'toggle_duty') {
+                    _toggleDutyStatus(partner);
+                  } else if (val == 'toggle_block') {
+                    _toggleBlockedStatus(partner, !isBlocked);
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    value: 'toggle_duty',
+                    child: Text(isOnDuty ? 'Go Off Duty' : 'Go On Duty'),
+                  ),
+                  PopupMenuItem(
+                    value: 'toggle_block',
+                    child: Text(isBlocked ? 'Unblock Partner' : 'Block Partner'),
+                  ),
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete Partner', style: TextStyle(color: Colors.red)),
+                  ),
+                ],
+                icon: const Icon(Icons.more_vert, color: Colors.grey),
+              ),
+            ],
           ),
-        );
-      },
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                isOnDuty ? 'ON DUTY' : 'OFF DUTY',
+                style: TextStyle(
+                  color: isOnDuty ? Colors.green : Colors.grey,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                ),
+              ),
+              Row(
+                children: [
+                  const Icon(Icons.star, color: Colors.amber, size: 16),
+                  const SizedBox(width: 4),
+                  Text(rating, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                ],
+              ),
+            ],
+          ),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => _showPartnerDetailsDialog(context, partner),
+                  style: OutlinedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 12),
+                    side: BorderSide(color: Colors.grey[200]!),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    'Details',
+                    style: TextStyle(
+                        fontSize: isMobile ? 11 : 12, color: Colors.black87),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _toggleDutyStatus(partner),
+                  style: ElevatedButton.styleFrom(
+                    padding: EdgeInsets.symmetric(vertical: isMobile ? 8 : 12),
+                    backgroundColor: isOnDuty
+                        ? Colors.red[50]
+                        : const Color(0xFF6A1B9A).withOpacity(0.1),
+                    foregroundColor: isOnDuty ? Colors.red : const Color(0xFF6A1B9A),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: Text(
+                    isOnDuty ? 'Off Duty' : 'On Duty',
+                    style: TextStyle(
+                        fontSize: isMobile ? 11 : 12,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
-  void _showPartnerDetailsDialog(
-    BuildContext context,
-    Map<String, dynamic> partner,
-  ) {
+  void _showPartnerDetailsDialog(BuildContext context, Map<String, dynamic> partner) {
+    bool isBlocked = partner['is_blocked'] ?? false;
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -522,91 +378,67 @@ class _DeliveryPartnersScreenState extends State<DeliveryPartnersScreen> {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
-            content: SizedBox(
-              width: 450,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CircleAvatar(
-                    radius: 40,
-                    backgroundColor: partner['isBlocked']
-                        ? Colors.red[50]
-                        : const Color(0xFFF3E5F5),
-                    child: Text(
-                      partner['name'][0],
-                      style: TextStyle(
-                        fontSize: 30,
+            content: Container(
+              width: MediaQuery.of(context).size.width * 0.9,
+              constraints: const BoxConstraints(maxWidth: 450),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: isBlocked ? Colors.red[50] : const Color(0xFFF3E5F5),
+                      child: Text(
+                        partner['name'] != null ? partner['name'][0] : 'D',
+                        style: TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.bold,
+                          color: isBlocked ? Colors.red : const Color(0xFF6A1B9A),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      partner['name'] ?? '',
+                      style: const TextStyle(
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
-                        color: partner['isBlocked']
-                            ? Colors.red
-                            : const Color(0xFF6A1B9A),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    partner['name'],
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    partner['id'],
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 24),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        _detailRow(Icons.phone, 'Contact', partner['phone']),
-                        _detailRow(
-                          Icons.location_on,
-                          'Address',
-                          partner['address'],
-                        ),
-                        _detailRow(
-                          Icons.directions_car,
-                          'Vehicle',
-                          '${partner['vehicle']} (${partner['number']})',
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _statItem(
-                        'Orders Today',
-                        partner['orders_today'].toString(),
+                    const SizedBox(height: 24),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[50],
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      _statItem('Rating', '⭐ ${partner['rating']}'),
-                      _statItem('Total Jobs', '452'),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF6A1B9A),
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.all(16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
+                      child: Column(
+                        children: [
+                          _detailRow(Icons.phone, 'Contact', partner['phone'] ?? 'N/A'),
+                          _detailRow(Icons.location_on, 'Address', partner['address'] ?? 'N/A'),
+                          _detailRow(Icons.directions_car, 'Vehicle',
+                              '${partner['vehicle'] ?? 'N/A'} (${partner['number_plate'] ?? 'N/A'})'),
+                        ],
                       ),
-                      child: const Text('Close Details'),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () => Navigator.pop(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF6A1B9A),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.all(16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                        child: const Text('Close Details'),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -650,30 +482,195 @@ class _DeliveryPartnersScreenState extends State<DeliveryPartnersScreen> {
     );
   }
 
-  Widget _statItem(String label, String value) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-            color: Color(0xFF6A1B9A),
+  void _showAddPartnerDialog(BuildContext context) {
+    final nameController = TextEditingController();
+    final phoneController = TextEditingController();
+    final addressController = TextEditingController();
+    final vehicleController = TextEditingController();
+    final regController = TextEditingController();
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: '',
+      transitionDuration: const Duration(milliseconds: 250),
+      pageBuilder: (context, anim1, anim2) => Container(),
+      transitionBuilder: (context, anim1, anim2, child) {
+        return Transform.scale(
+          scale: CurvedAnimation(
+            parent: anim1,
+            curve: Curves.easeOutBack,
+          ).value.clamp(0.8, 1.0),
+          child: FadeTransition(
+            opacity: anim1,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              contentPadding: EdgeInsets.zero,
+              content: Container(
+                width: MediaQuery.of(context).size.width * 0.9,
+                constraints: const BoxConstraints(maxWidth: 500),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(24),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF6A1B9A),
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(
+                              Icons.person_add_alt_1_rounded,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                            SizedBox(width: 16),
+                            Text(
+                              'Add Delivery Partner',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            _buildDialogField(Icons.person, 'Partner Name', 'e.g. Suresh Kumar', nameController),
+                            const SizedBox(height: 16),
+                            _buildDialogField(Icons.phone, 'Phone Number', '+91 XXXXX XXXXX', phoneController),
+                            const SizedBox(height: 16),
+                            _buildDialogField(Icons.location_on, 'Home Address', 'Full Address details', addressController),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildDialogField(
+                                      Icons.directions_bike, 'Vehicle', 'e.g. Bike', vehicleController),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: _buildDialogField(Icons.badge, 'Reg No.', 'DL XX XXXX', regController),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            _buildDialogField(Icons.alternate_email_rounded, 'Email Address (Credentials)', 'partner@example.com', emailController),
+                            const SizedBox(height: 16),
+                            _buildDialogField(Icons.lock_outline_rounded, 'Password (Credentials)', '••••••••', passwordController),
+                            const SizedBox(height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: Text(
+                                    'Cancel',
+                                    style: TextStyle(color: Colors.grey[600]),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                ElevatedButton(
+                                  onPressed: () async {
+                                    if (nameController.text.isNotEmpty &&
+                                        emailController.text.isNotEmpty &&
+                                        passwordController.text.isNotEmpty) {
+                                      try {
+                                        // 1. Register credentials in Supabase Auth
+                                        final uid = await SupabaseService()
+                                            .registerUserCredentials(
+                                          emailController.text.trim(),
+                                          passwordController.text,
+                                        );
+
+                                        // 2. Save delivery partner profile linked to UID
+                                        final payload = {
+                                          'id': uid,
+                                          'name': nameController.text.trim(),
+                                          'phone': phoneController.text.trim(),
+                                          'address': addressController.text.trim(),
+                                          'vehicle': vehicleController.text.trim(),
+                                          'number_plate': regController.text.trim(),
+                                          'email': emailController.text.trim(),
+                                          'status': 'On Duty',
+                                          'rating': 5.0,
+                                        };
+                                        await SupabaseService()
+                                            .createDeliveryPartner(payload);
+                                        _loadPartners();
+                                        if (mounted) Navigator.pop(context);
+                                      } catch (e) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                                'Failed to register partner credentials: $e'),
+                                            backgroundColor: Colors.redAccent,
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      }
+                                    } else {
+                                      ScaffoldMessenger.of(context)
+                                          .showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                              'Name, Email and Password are required.'),
+                                          backgroundColor: Colors.orangeAccent,
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF6A1B9A),
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 32,
+                                      vertical: 16,
+                                    ),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Add Partner',
+                                    style: TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[500],
-            fontSize: 11,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
-  Widget _buildDialogField(IconData icon, String label, String hint) {
+  Widget _buildDialogField(IconData icon, String label, String hint, TextEditingController ctrl) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -687,6 +684,7 @@ class _DeliveryPartnersScreenState extends State<DeliveryPartnersScreen> {
         ),
         const SizedBox(height: 8),
         TextField(
+          controller: ctrl,
           decoration: InputDecoration(
             hintText: hint,
             hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),

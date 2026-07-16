@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/supabase_service.dart';
 
 class CategoriesScreen extends StatefulWidget {
   const CategoriesScreen({super.key});
@@ -8,103 +9,188 @@ class CategoriesScreen extends StatefulWidget {
 }
 
 class _CategoriesScreenState extends State<CategoriesScreen> {
-  final List<Map<String, dynamic>> _categories = [
-    {
-      'id': 'CAT001',
-      'name': 'Men\'s Wear',
-      'items': 124,
-      'icon': Icons.man_rounded,
-      'color': Colors.blue,
-      'isEnabled': true,
-    },
-    {
-      'id': 'CAT002',
-      'name': 'Women\'s Wear',
-      'items': 256,
-      'icon': Icons.woman_rounded,
-      'color': Colors.pink,
-      'isEnabled': true,
-    },
-    {
-      'id': 'CAT003',
-      'name': 'Wedding Collection',
-      'items': 45,
-      'icon': Icons.celebration_rounded,
-      'color': Colors.amber,
-      'isEnabled': true,
-    },
-    {
-      'id': 'CAT004',
-      'name': 'Accessories',
-      'items': 89,
-      'icon': Icons.watch_rounded,
-      'color': Colors.orange,
-      'isEnabled': true,
-    },
-    {
-      'id': 'CAT005',
-      'name': 'Corporate Uniforms',
-      'items': 32,
-      'icon': Icons.business_center_rounded,
-      'color': Colors.teal,
-      'isEnabled': false,
-    },
-  ];
+  List<Map<String, dynamic>> _categories = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    setState(() => _isLoading = true);
+    try {
+      final data = await SupabaseService().getCategories();
+      setState(() {
+        _categories = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load categories: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  IconData _getIconData(String name) {
+    switch (name) {
+      case 'shopping_bag':
+        return Icons.shopping_bag;
+      case 'checkroom':
+        return Icons.checkroom;
+      case 'dry_cleaning':
+        return Icons.dry_cleaning;
+      case 'style':
+        return Icons.style;
+      case 'man_rounded':
+        return Icons.man_rounded;
+      case 'woman_rounded':
+        return Icons.woman_rounded;
+      case 'celebration_rounded':
+        return Icons.celebration_rounded;
+      case 'watch_rounded':
+        return Icons.watch_rounded;
+      case 'business_center_rounded':
+        return Icons.business_center_rounded;
+      default:
+        return Icons.category_rounded;
+    }
+  }
+
+  String _getIconName(IconData icon) {
+    if (icon == Icons.shopping_bag) return 'shopping_bag';
+    if (icon == Icons.checkroom) return 'checkroom';
+    if (icon == Icons.dry_cleaning) return 'dry_cleaning';
+    if (icon == Icons.style) return 'style';
+    if (icon == Icons.man_rounded) return 'man_rounded';
+    if (icon == Icons.woman_rounded) return 'woman_rounded';
+    if (icon == Icons.celebration_rounded) return 'celebration_rounded';
+    if (icon == Icons.watch_rounded) return 'watch_rounded';
+    if (icon == Icons.business_center_rounded) return 'business_center_rounded';
+    return 'category_rounded';
+  }
+
+  Color _getColor(String hex) {
+    try {
+      final hexColor = hex.replaceAll('#', '');
+      return Color(int.parse('FF$hexColor', radix: 16));
+    } catch (e) {
+      return Colors.purple;
+    }
+  }
+
+  String _getHexColor(Color color) {
+    return '#${color.value.toRadixString(16).padLeft(8, '0').substring(2)}';
+  }
+
+  Future<void> _toggleEnabled(Map<String, dynamic> category, bool value) async {
+    try {
+      await SupabaseService().updateCategory(category['id'].toString(), {
+        'is_enabled': value,
+      });
+      _loadCategories();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to update status: $e'),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        Wrap(
+          spacing: 20,
+          runSpacing: 20,
+          alignment: WrapAlignment.spaceBetween,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             const Text(
               'Category Management',
               style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
             ),
-            ElevatedButton.icon(
-              onPressed: () => _showCategoryDialog(),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add Category'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF6A1B9A),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 20,
-                  vertical: 15,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
+            SizedBox(
+              width: MediaQuery.of(context).size.width < 600
+                  ? double.infinity
+                  : null,
+              child: ElevatedButton.icon(
+                onPressed: () => _showCategoryDialog(),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Add Category'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6A1B9A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 15,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),
           ],
         ),
         const SizedBox(height: 30),
-        GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 5,
-            crossAxisSpacing: 20,
-            mainAxisSpacing: 20,
-            childAspectRatio: 1.2,
-          ),
-          itemCount: _categories.length,
-          itemBuilder: (context, index) {
-            return _buildCategoryCard(_categories[index], index);
-          },
-        ),
+        _isLoading
+            ? const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(50.0),
+                  child: CircularProgressIndicator(color: Color(0xFF6A1B9A)),
+                ),
+              )
+            : _categories.isEmpty
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(50.0),
+                      child: Text('No categories found.'),
+                    ),
+                  )
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isMobile = constraints.maxWidth < 600;
+                      return GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate: SliverGridDelegateWithMaxCrossAxisExtent(
+                          maxCrossAxisExtent: 400,
+                          mainAxisExtent: isMobile ? 160 : 200,
+                          crossAxisSpacing: 20,
+                          mainAxisSpacing: 20,
+                        ),
+                        itemCount: _categories.length,
+                        itemBuilder: (context, index) {
+                          return _buildCategoryCard(_categories[index]);
+                        },
+                      );
+                    },
+                  ),
       ],
     );
   }
 
-  Widget _buildCategoryCard(Map<String, dynamic> category, int index) {
-    bool isEnabled = category['isEnabled'];
+  Widget _buildCategoryCard(Map<String, dynamic> category) {
+    final isEnabled = category['is_enabled'] ?? true;
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final color = _getColor(category['color_hex'] ?? '9C27B0');
+    final icon = _getIconData(category['icon_name'] ?? 'shopping_bag');
+    final itemsCount = category['items_count'] ?? 0;
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: EdgeInsets.all(isMobile ? 15 : 20),
       decoration: BoxDecoration(
         color: isEnabled ? Colors.white : Colors.grey[100],
         borderRadius: BorderRadius.circular(20),
@@ -122,57 +208,58 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
         children: [
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: (category['color'] as Color).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  category['icon'],
-                  color: category['color'],
-                  size: 26,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      icon,
+                      color: color,
+                      size: isMobile ? 22 : 26,
+                    ),
+                  ),
+                  SizedBox(height: isMobile ? 10 : 15),
+                  Text(
+                    category['name'] ?? '',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: isMobile ? 14 : 16,
+                      color: isEnabled ? Colors.black87 : Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '$itemsCount Items',
+                    style: TextStyle(
+                        color: Colors.grey[500], fontSize: isMobile ? 11 : 13),
+                  ),
+                ],
               ),
-              const SizedBox(height: 15),
-              Text(
-                category['name'],
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: isEnabled ? Colors.black87 : Colors.grey,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${category['items']} Items',
-                style: TextStyle(color: Colors.grey[500], fontSize: 13),
-              ),
-              const Spacer(),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
                     isEnabled ? 'Active' : 'Disabled',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: FontWeight.bold,
                       color: isEnabled ? Colors.green : Colors.red,
                     ),
                   ),
-                  SizedBox(
-                    height: 24,
-                    width: 40,
+                  Transform.scale(
+                    scale: isMobile ? 0.7 : 0.8,
                     child: Switch(
                       value: isEnabled,
-                      onChanged: (value) {
-                        setState(() {
-                          _categories[index]['isEnabled'] = value;
-                        });
-                      },
+                      onChanged: (value) => _toggleEnabled(category, value),
                       activeColor: const Color(0xFF6A1B9A),
                     ),
                   ),
@@ -181,14 +268,14 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             ],
           ),
           Positioned(
-            top: -10,
-            right: -10,
+            top: isMobile ? -5 : -10,
+            right: isMobile ? -5 : -10,
             child: PopupMenuButton<String>(
               onSelected: (value) {
                 if (value == 'edit') {
-                  _showCategoryDialog(category: category, index: index);
+                  _showCategoryDialog(category: category);
                 } else if (value == 'delete') {
-                  _confirmDelete(index);
+                  _confirmDelete(category);
                 }
               },
               itemBuilder: (context) => [
@@ -218,7 +305,8 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                   ),
                 ),
               ],
-              icon: const Icon(Icons.more_vert, color: Colors.grey, size: 18),
+              icon: Icon(Icons.more_vert,
+                  color: Colors.grey, size: isMobile ? 16 : 18),
             ),
           ),
         ],
@@ -226,14 +314,18 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     );
   }
 
-  void _showCategoryDialog({Map<String, dynamic>? category, int? index}) {
+  void _showCategoryDialog({Map<String, dynamic>? category}) {
     final isEditing = category != null;
     final nameController = TextEditingController(
       text: isEditing ? category['name'] : '',
     );
 
-    IconData selectedIcon = isEditing ? category['icon'] : Icons.shopping_bag;
-    Color selectedColor = isEditing ? category['color'] : Colors.purple;
+    IconData selectedIcon = isEditing
+        ? _getIconData(category['icon_name'] ?? 'shopping_bag')
+        : Icons.shopping_bag;
+    Color selectedColor = isEditing
+        ? _getColor(category['color_hex'] ?? '9C27B0')
+        : Colors.purple;
 
     showGeneralDialog(
       context: context,
@@ -282,92 +374,101 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                       ],
                     ),
                   ),
-                  content: SizedBox(
-                    width: 450,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Category Details',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey,
+                  content: Container(
+                    width: MediaQuery.of(context).size.width * 0.9,
+                    constraints: const BoxConstraints(maxWidth: 450),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Category Details',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 15),
-                        TextField(
-                          controller: nameController,
-                          decoration: InputDecoration(
-                            labelText: 'Category Name',
-                            hintText: 'e.g. Traditional Wear',
-                            prefixIcon: const Icon(
-                              Icons.category_outlined,
-                              color: Color(0xFF6A1B9A),
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            focusedBorder: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(
+                          const SizedBox(height: 15),
+                          TextField(
+                            controller: nameController,
+                            decoration: InputDecoration(
+                              labelText: 'Category Name',
+                              hintText: 'e.g. Traditional Wear',
+                              prefixIcon: const Icon(
+                                Icons.category_outlined,
                                 color: Color(0xFF6A1B9A),
-                                width: 2,
+                              ),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: const BorderSide(
+                                  color: Color(0xFF6A1B9A),
+                                  width: 2,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 25),
-                        const Text(
-                          'Select Visual Identity',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Colors.grey,
+                          const SizedBox(height: 25),
+                          const Text(
+                            'Select Visual Identity',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.grey,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 15),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _enhancedIconPicker(
-                              Icons.shopping_bag,
-                              Colors.purple,
-                              selectedIcon == Icons.shopping_bag,
-                              () => setDialogState(() {
-                                selectedIcon = Icons.shopping_bag;
-                                selectedColor = Colors.purple;
-                              }),
+                          const SizedBox(height: 15),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _enhancedIconPicker(
+                                  Icons.shopping_bag,
+                                  Colors.purple,
+                                  selectedIcon == Icons.shopping_bag,
+                                  () => setDialogState(() {
+                                    selectedIcon = Icons.shopping_bag;
+                                    selectedColor = Colors.purple;
+                                  }),
+                                ),
+                                const SizedBox(width: 10),
+                                _enhancedIconPicker(
+                                  Icons.checkroom,
+                                  Colors.blue,
+                                  selectedIcon == Icons.checkroom,
+                                  () => setDialogState(() {
+                                    selectedIcon = Icons.checkroom;
+                                    selectedColor = Colors.blue;
+                                  }),
+                                ),
+                                const SizedBox(width: 10),
+                                _enhancedIconPicker(
+                                  Icons.dry_cleaning,
+                                  Colors.pink,
+                                  selectedIcon == Icons.dry_cleaning,
+                                  () => setDialogState(() {
+                                    selectedIcon = Icons.dry_cleaning;
+                                    selectedColor = Colors.pink;
+                                  }),
+                                ),
+                                const SizedBox(width: 10),
+                                _enhancedIconPicker(
+                                  Icons.style,
+                                  Colors.orange,
+                                  selectedIcon == Icons.style,
+                                  () => setDialogState(() {
+                                    selectedIcon = Icons.style;
+                                    selectedColor = Colors.orange;
+                                  }),
+                                ),
+                              ],
                             ),
-                            _enhancedIconPicker(
-                              Icons.checkroom,
-                              Colors.blue,
-                              selectedIcon == Icons.checkroom,
-                              () => setDialogState(() {
-                                selectedIcon = Icons.checkroom;
-                                selectedColor = Colors.blue;
-                              }),
-                            ),
-                            _enhancedIconPicker(
-                              Icons.dry_cleaning,
-                              Colors.pink,
-                              selectedIcon == Icons.dry_cleaning,
-                              () => setDialogState(() {
-                                selectedIcon = Icons.dry_cleaning;
-                                selectedColor = Colors.pink;
-                              }),
-                            ),
-                            _enhancedIconPicker(
-                              Icons.style,
-                              Colors.orange,
-                              selectedIcon == Icons.style,
-                              () => setDialogState(() {
-                                selectedIcon = Icons.style;
-                                selectedColor = Colors.orange;
-                              }),
-                            ),
-                          ],
-                        ),
-                      ],
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                   actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -381,25 +482,35 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton(
-                      onPressed: () {
+                      onPressed: () async {
                         if (nameController.text.isNotEmpty) {
-                          setState(() {
+                          final payload = {
+                            'name': nameController.text.trim(),
+                            'icon_name': _getIconName(selectedIcon),
+                            'color_hex': _getHexColor(selectedColor),
+                            'is_enabled': isEditing
+                                ? (category['is_enabled'] ?? true)
+                                : true,
+                          };
+
+                          try {
                             if (isEditing) {
-                              _categories[index!]['name'] = nameController.text;
-                              _categories[index]['icon'] = selectedIcon;
-                              _categories[index]['color'] = selectedColor;
+                              await SupabaseService().updateCategory(
+                                  category['id'].toString(), payload);
                             } else {
-                              _categories.add({
-                                'id': 'CAT00${_categories.length + 1}',
-                                'name': nameController.text,
-                                'items': 0,
-                                'icon': selectedIcon,
-                                'color': selectedColor,
-                                'isEnabled': true,
-                              });
+                              await SupabaseService().createCategory(payload);
                             }
-                          });
-                          Navigator.pop(context);
+                            _loadCategories();
+                            if (mounted) Navigator.pop(context);
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Error saving category: $e'),
+                                backgroundColor: Colors.redAccent,
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          }
                         }
                       },
                       style: ElevatedButton.styleFrom(
@@ -457,13 +568,13 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
     );
   }
 
-  void _confirmDelete(int index) {
+  void _confirmDelete(Map<String, dynamic> category) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Category?'),
         content: Text(
-          'Are you sure you want to delete "${_categories[index]['name']}"? This action cannot be undone.',
+          'Are you sure you want to delete "${category['name']}"? This action cannot be undone.',
         ),
         actions: [
           TextButton(
@@ -471,11 +582,21 @@ class _CategoriesScreenState extends State<CategoriesScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _categories.removeAt(index);
-              });
-              Navigator.pop(context);
+            onPressed: () async {
+              try {
+                await SupabaseService()
+                    .deleteCategory(category['id'].toString());
+                _loadCategories();
+                if (mounted) Navigator.pop(context);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to delete category: $e'),
+                    backgroundColor: Colors.redAccent,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,

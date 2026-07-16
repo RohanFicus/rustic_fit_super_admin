@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 
+import 'login_screen.dart';
 import 'screens/categories_screen.dart';
 import 'screens/customers_screen.dart';
 import 'screens/dashboard_overview_screen.dart';
 import 'screens/delivery_partners_screen.dart';
 import 'screens/locations_screen.dart';
+import 'screens/measurements_screen.dart';
 import 'screens/orders_screen.dart';
 import 'screens/products_screen.dart';
 import 'screens/tailors_screen.dart';
 import 'screens/transactions_screen.dart';
+import 'services/supabase_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -31,6 +34,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     {'title': 'Transactions', 'icon': Icons.account_balance_wallet_rounded},
     {'title': 'Categories', 'icon': Icons.category_rounded},
     {'title': 'Products', 'icon': Icons.inventory_2_rounded},
+    {'title': 'Measurements', 'icon': Icons.straighten_rounded},
     {'title': 'Locations', 'icon': Icons.location_on_rounded},
   ];
 
@@ -59,223 +63,181 @@ class _DashboardScreenState extends State<DashboardScreen>
     _contentAnimationController.forward();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    const themeColor = Color(0xFF6A1B9A);
-    const sidebarColor = Color(0xFF2D2D2D);
-
-    return Scaffold(
-      body: Row(
+  Widget _buildSidebar(Color themeColor, Color sidebarColor) {
+    return Container(
+      width: 280,
+      color: sidebarColor,
+      child: Column(
         children: [
-          // Sidebar
           Container(
-            width: 280,
-            decoration: BoxDecoration(
-              color: sidebarColor,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.3),
-                  blurRadius: 10,
-                  offset: const Offset(5, 0),
-                ),
-              ],
+            padding: const EdgeInsets.symmetric(
+              vertical: 40,
+              horizontal: 20,
             ),
             child: Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    vertical: 40,
-                    horizontal: 20,
-                  ),
-                  child: Column(
-                    children: [
-                      Hero(
-                        tag: 'logo',
-                        child: Image.asset(
-                          'assets/images/logo.png',
-                          height: 60,
-                          errorBuilder: (context, error, stackTrace) =>
-                              const Icon(
-                                Icons.admin_panel_settings,
-                                color: themeColor,
-                                size: 50,
-                              ),
+                Hero(
+                  tag: 'logo',
+                  child: Image.asset(
+                    'assets/images/logo.png',
+                    height: 60,
+                    errorBuilder: (context, error, stackTrace) =>
+                        Icon(
+                          Icons.admin_panel_settings,
+                          color: themeColor,
+                          size: 50,
                         ),
-                      ),
-                      const SizedBox(height: 15),
-                      const Text(
-                        'RUSCFIT ADMIN',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
-                const Divider(color: Colors.white10, height: 1),
-                const SizedBox(height: 10),
-                Expanded(
-                  child: ListView.builder(
-                    itemCount: _menuItems.length,
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemBuilder: (context, index) {
-                      final item = _menuItems[index];
-                      final isSelected = _selectedMenu == item['title'];
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 300),
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(12),
-                          color: isSelected ? themeColor : Colors.transparent,
-                        ),
-                        child: ListTile(
-                          onTap: () => _onMenuSelected(item['title'] as String),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          leading: Icon(
-                            item['icon'],
-                            color: isSelected ? Colors.white : Colors.white60,
-                            size: 22,
-                          ),
-                          title: Text(
-                            item['title'],
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.white70,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              fontSize: 15,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const Divider(color: Colors.white10, height: 1),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: ListTile(
-                    onTap: () {
-                      Navigator.of(context).pushReplacementNamed('/');
-                    },
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    leading: const Icon(
-                      Icons.logout_rounded,
-                      color: Colors.redAccent,
-                      size: 22,
-                    ),
-                    title: const Text(
-                      'Logout',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                const SizedBox(height: 15),
+                const Text(
+                  'RUSCFIT ADMIN',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
                   ),
                 ),
               ],
             ),
           ),
+          const Divider(color: Colors.white10, height: 1),
+          const SizedBox(height: 10),
+          Expanded(
+            child: ListView.builder(
+              itemCount: _menuItems.length,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemBuilder: (context, index) {
+                final item = _menuItems[index];
+                final isSelected = _selectedMenu == item['title'];
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: isSelected ? themeColor : Colors.transparent,
+                  ),
+                  child: ListTile(
+                    onTap: () {
+                      _onMenuSelected(item['title'] as String);
+                      if (MediaQuery.of(context).size.width < 1100) {
+                        Navigator.pop(context);
+                      }
+                    },
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    leading: Icon(
+                      item['icon'],
+                      color: isSelected ? Colors.white : Colors.white60,
+                      size: 22,
+                    ),
+                    title: Text(
+                      item['title'],
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : Colors.white70,
+                        fontWeight: isSelected
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const Divider(color: Colors.white10, height: 1),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: ListTile(
+              onTap: () async {
+                await SupabaseService().signOut();
+                if (mounted) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(
+                      builder: (context) => const LoginScreen(),
+                    ),
+                  );
+                }
+              },
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              leading: const Icon(
+                Icons.logout_rounded,
+                color: Colors.redAccent,
+                size: 22,
+              ),
+              title: const Text(
+                'Logout',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const themeColor = Color(0xFF6A1B9A);
+    const sidebarColor = Color(0xFF2D2D2D);
+    final isMobile = MediaQuery.of(context).size.width < 1100;
+
+    return Scaffold(
+      appBar: isMobile
+          ? AppBar(
+              title: Text(
+                _selectedMenu,
+                style: const TextStyle(
+                  color: Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              backgroundColor: Colors.white,
+              elevation: 0,
+              iconTheme: const IconThemeData(color: themeColor),
+              actions: [
+                const CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Color(0xFFF3E5F5),
+                  child: Icon(
+                    Icons.person_rounded,
+                    color: themeColor,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 16),
+              ],
+            )
+          : null,
+      drawer: isMobile ? Drawer(child: _buildSidebar(themeColor, sidebarColor)) : null,
+      body: Row(
+        children: [
+          // Sidebar for Desktop
+          if (!isMobile)
+            Container(
+              decoration: BoxDecoration(
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 10,
+                    offset: const Offset(5, 0),
+                  ),
+                ],
+              ),
+              child: _buildSidebar(themeColor, sidebarColor),
+            ),
           // Main Content Area
           Expanded(
             child: Column(
               children: [
-                // Custom App Bar
-                // Container(
-                //   height: 70,
-                //   padding: const EdgeInsets.symmetric(horizontal: 30),
-                //   decoration: BoxDecoration(
-                //     color: Colors.white,
-                //     border: Border(
-                //       bottom: BorderSide(color: Colors.grey[100]!, width: 1),
-                //     ),
-                //   ),
-                //   child: Row(
-                //     children: [
-                //       Text(
-                //         _selectedMenu,
-                //         style: const TextStyle(
-                //           fontSize: 20,
-                //           fontWeight: FontWeight.bold,
-                //           color: Color(0xFF333333),
-                //         ),
-                //       ),
-                //       const Spacer(),
-                //       IconButton(
-                //         onPressed: () {},
-                //         icon: const Icon(
-                //           Icons.search_rounded,
-                //           color: Colors.grey,
-                //         ),
-                //       ),
-                //       const SizedBox(width: 10),
-                //       Stack(
-                //         children: [
-                //           IconButton(
-                //             onPressed: () {},
-                //             icon: const Icon(
-                //               Icons.notifications_none_rounded,
-                //               color: Colors.grey,
-                //             ),
-                //           ),
-                //           Positioned(
-                //             right: 12,
-                //             top: 12,
-                //             child: Container(
-                //               width: 8,
-                //               height: 8,
-                //               decoration: const BoxDecoration(
-                //                 color: Colors.red,
-                //                 shape: BoxShape.circle,
-                //               ),
-                //             ),
-                //           ),
-                //         ],
-                //       ),
-                //       const SizedBox(width: 20),
-                //       VerticalDivider(
-                //         indent: 20,
-                //         endIndent: 20,
-                //         color: Colors.grey[200],
-                //       ),
-                //       const SizedBox(width: 20),
-                //       const Column(
-                //         mainAxisAlignment: MainAxisAlignment.center,
-                //         crossAxisAlignment: CrossAxisAlignment.end,
-                //         children: [
-                //           Text(
-                //             'Akash Singh',
-                //             style: TextStyle(
-                //               fontSize: 14,
-                //               fontWeight: FontWeight.bold,
-                //             ),
-                //           ),
-                //           Text(
-                //             'Super Admin',
-                //             style: TextStyle(fontSize: 12, color: Colors.grey),
-                //           ),
-                //         ],
-                //       ),
-                //       const SizedBox(width: 15),
-                //       const CircleAvatar(
-                //         radius: 18,
-                //         backgroundColor: Color(0xFFF3E5F5),
-                //         child: Icon(
-                //           Icons.person_rounded,
-                //           color: themeColor,
-                //           size: 20,
-                //         ),
-                //       ),
-                //     ],
-                //   ),
-                // ),
                 // Content with Animation
                 Expanded(
                   child: FadeTransition(
@@ -292,7 +254,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ),
                           ),
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(30.0),
+                        padding: EdgeInsets.all(isMobile ? 16.0 : 30.0),
                         child: _buildCurrentScreen(),
                       ),
                     ),
@@ -324,6 +286,8 @@ class _DashboardScreenState extends State<DashboardScreen>
         return const CategoriesScreen();
       case 'Products':
         return const ProductsScreen();
+      case 'Measurements':
+        return const MeasurementsScreen();
       case 'Locations':
         return const LocationsScreen();
       default:
